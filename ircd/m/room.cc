@@ -1084,7 +1084,19 @@ void
 ircd::m::room::state::for_each(const event::closure &closure)
 const
 {
-	event::fetch event;
+	for_each(closure, event::keys::exclude{});
+}
+
+void
+ircd::m::room::state::for_each(const event::closure &closure,
+                               const event::keys::selection &selection)
+const
+{
+	event::fetch event
+	{
+		selection
+	};
+
 	for_each(event::closure_idx{[&event, &closure]
 	(const event::idx &event_idx)
 	{

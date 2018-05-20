@@ -289,6 +289,23 @@ console_cmd__help(opt &out, const string_view &line)
 bool
 console_cmd__test(opt &out, const string_view &line)
 {
+	const m::event::keys::selection selection
+	{
+		m::event::keys::exclude
+		{
+			"event_id",
+			"room_id",
+			"sender",
+			"type"
+		}
+	};
+
+	const m::event::fetch event
+	{
+		123, std::nothrow, selection
+	};
+
+	out << event << std::endl;
 	return true;
 }
 
@@ -1655,6 +1672,38 @@ catch(const std::out_of_range &e)
 }
 
 bool
+console_cmd__db__DROP__DROP__DROP(opt &out, const string_view &line)
+try
+{
+	const params param{line, " ",
+	{
+		"dbname", "column"
+	}};
+
+	const auto dbname
+	{
+		param.at(0)
+	};
+
+	const auto colname
+	{
+		param.at(0)
+	};
+
+	auto &database
+	{
+		*db::database::dbs.at(dbname)
+	};
+
+	return true;
+}
+catch(const std::out_of_range &e)
+{
+	out << "No open database by that name" << std::endl;
+	return true;
+}
+
+bool
 console_cmd__db__list(opt &out, const string_view &line)
 {
 	const auto available
@@ -2307,9 +2356,14 @@ console_cmd__events__filter(opt &out, const string_view &line)
 bool
 console_cmd__event(opt &out, const string_view &line)
 {
+	const params param{line, " ",
+	{
+		"event_id"
+	}};
+
 	const m::event::id event_id
 	{
-		token(line, ' ', 0)
+		param.at(0)
 	};
 
 	const auto args
@@ -2317,16 +2371,22 @@ console_cmd__event(opt &out, const string_view &line)
 		tokens_after(line, ' ', 0)
 	};
 
-	static char buf[64_KiB];
-	const m::event event
+	const m::event::fetch event
 	{
-		event_id, buf
+		index(event_id)
+		/* std::nothrow, m::event::keys::include
+		{
+			"event_id",
+			"room_id",
+			"sender"
+		}
+		*/
 	};
 
 	if(!empty(args)) switch(hash(token(args, ' ', 0)))
 	{
 		case hash("raw"):
-			out << json::object{buf} << std::endl;
+			out << event << std::endl;
 			return true;
 
 		case hash("idx"):
@@ -4897,6 +4957,7 @@ console_cmd__fed__sync(opt &out, const string_view &line)
 	vmopts.prev_check_exists = false;
 	vmopts.head_must_exist = false;
 	vmopts.history = false;
+	vmopts.verify = false;
 	vmopts.notify = false;
 	vmopts.debuglog_accept = true;
 	vmopts.nothrows = -1;
@@ -4989,6 +5050,7 @@ console_cmd__fed__state(opt &out, const string_view &line)
 	vmopts.non_conform.set(m::event::conforms::MISSING_MEMBERSHIP);
 	vmopts.prev_check_exists = false;
 	vmopts.head_must_exist = false;
+	vmopts.verify = false;
 	vmopts.history = false;
 	vmopts.notify = false;
 	m::vm::eval eval
@@ -5145,6 +5207,7 @@ console_cmd__fed__backfill(opt &out, const string_view &line)
 	vmopts.prev_check_exists = false;
 	vmopts.head_must_exist = false;
 	vmopts.history = false;
+	vmopts.verify = false;
 	vmopts.notify = false;
 	m::vm::eval eval
 	{

@@ -223,13 +223,13 @@ register_resource
 		"(3.3.1) Register for an account on this homeserver."
 	}
 };
-
+/*
 resource::method
 method_post
 {
 	register_resource, "POST", post__register
 };
-
+*/
 void
 validate_user_id(const m::id::user &user_id)
 {
@@ -256,7 +256,7 @@ validate_password(const string_view &password)
 }
 
 static void _first_user_registered(const m::event &event);
-
+/*
 const m::hook<>
 _first_user_hook
 {
@@ -267,7 +267,7 @@ _first_user_hook
 		{ "type",     "ircd.user"   },
 	},
 };
-
+*/
 void
 _first_user_registered(const m::event &event)
 {

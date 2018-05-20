@@ -2013,11 +2013,11 @@ ircd::m::dbs::desc::events
 
 	// event_id => uint64_t
 	// Mapping of faulty event_id to possible alternative event_idx.
-	events__event_bad,
+	//events__event_bad,
 
 	// (room_id, event_id) => (event_idx)
 	// Mapping of all current head events for a room.
-	events__room_head,
+	//events__room_head,
 
 	// (room_id, (depth, event_idx)) => (state_root)
 	// Sequence of all events for a room, ever.
@@ -2034,4 +2034,8 @@ ircd::m::dbs::desc::events
 	// (state tree node id) => (state tree node)
 	// Mapping of state tree node id to node data.
 	events__state_node,
+
+
+	events__event_bad,
+	events__room_head,
 };

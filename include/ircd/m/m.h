@@ -55,6 +55,7 @@ namespace ircd
 #include "error.h"
 #include "import.h"
 #include "id.h"
+#include "commitment.h"
 #include "event.h"
 #include "dbs.h"
 #include "state.h"

@@ -237,6 +237,7 @@ struct ircd::m::room::state
 	void for_each(const string_view &type, const event::closure &) const;
 	void for_each(const event::closure_idx &) const;
 	void for_each(const event::id::closure &) const;
+	void for_each(const event::closure &, const event::keys::selection &) const;
 	void for_each(const event::closure &) const;
 
 	// Iterate the state; test protocol

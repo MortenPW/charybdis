@@ -15,7 +15,7 @@ namespace ircd::m::vm
 	extern hook<>::site eval_hook;
 	extern hook<>::site notify_hook;
 
-	static void write(eval &);
+	static void write_commit(eval &);
 	static fault _eval_edu(eval &, const event &);
 	static fault _eval_pdu(eval &, const event &);
 
@@ -80,6 +80,8 @@ ircd::m::vm::init()
 void
 ircd::m::vm::fini()
 {
+	assert(eval::list.empty());
+
 	id::event::buf event_id;
 	const auto current_sequence
 	{
@@ -105,10 +107,12 @@ ircd::m::vm::eval__commit_room(eval &eval,
                                json::iov &event,
                                const json::iov &contents)
 {
+	// These conditions come from the m::eval linkage in ircd/m.cc
 	assert(eval.issue);
 	assert(eval.room_id);
 	assert(eval.copts);
 	assert(eval.opts);
+	assert(eval.phase == eval.ENTER);
 	assert(room.room_id);
 
 	const auto &opts
@@ -121,24 +125,48 @@ ircd::m::vm::eval__commit_room(eval &eval,
 		event, { "room_id", room.room_id }
 	};
 
-	int64_t depth{-1};
-	event::id::buf prev_event_id
+	int64_t depth{-1}, prev_cnt{0};
+	std::string prev_events(8192, char());
+	json::stack ps
 	{
+		mutable_buffer{prev_events}
 	};
 
-	if(room.event_id)
-		prev_event_id = room.event_id;
-	else
-		std::tie(prev_event_id, depth, std::ignore) = m::top(std::nothrow, room.room_id);
-
-	//TODO: X
-	const event::fetch evf
 	{
-		prev_event_id, std::nothrow
-	};
+		json::stack::array top{ps};
+		room::head{room}.for_each(room::head::closure_bool{[&top, &depth, &prev_cnt]
+		(const event::idx &idx, const event::id &event_id)
+		{
+			const m::event::fetch event{idx, std::nothrow};
+			if(!event.valid)
+				return true;
 
-	if(room.event_id)
-		depth = at<"depth"_>(evf);
+			depth = std::max(at<"depth"_>(event), depth);
+			json::stack::array prev{top};
+			prev.append(event_id);
+			{
+				json::stack::object hash{prev};
+				json::stack::member will{hash, "willy", "nilly"};
+			}
+
+			return ++prev_cnt < 16;
+		}});
+
+		if(!prev_cnt && event.at("type") != "m.room.create")
+		{
+			const auto t(m::top(room));
+			depth = std::get<1>(t);
+			json::stack::array prev{top};
+			prev.append(std::get<0>(t));
+			{
+				json::stack::object hash{prev};
+				json::stack::member will{hash, "willy", "nilly"};
+			}
+		}
+	}
+
+	prev_events.resize(size(ps.completed()));
+	json::valid(prev_events);
 
 	//TODO: X
 	const json::iov::set_if depth_
@@ -190,11 +218,6 @@ ircd::m::vm::eval__commit_room(eval &eval,
 			ae.emplace_back(ae_);
 		});
 
-		auth_events = json::stringify(mutable_buffer{ae_buf}, json::value
-		{
-			ae.data(), ae.size()
-		});
-
 		room.get(std::nothrow, "m.room.power_levels", "", [&ae]
 		(const m::event &event)
 		{
@@ -212,28 +235,23 @@ ircd::m::vm::eval__commit_room(eval &eval,
 			ae.emplace_back(ae_);
 		});
 
-		auth_events = json::stringify(mutable_buffer{ae_buf}, json::value
-		{
-			ae.data(), ae.size()
-		});
-
 		if(event.at("type") != "m.room.member")
-		room.get(std::nothrow, "m.room.member", event.at("sender"), [&ae]
-		(const m::event &event)
-		{
-			const json::value ae0[]
+			room.get(std::nothrow, "m.room.member", event.at("sender"), [&ae]
+			(const m::event &event)
 			{
-				{ json::get<"event_id"_>(event) },
-				{ json::get<"hashes"_>(event)   }
-			};
+				const json::value ae0[]
+				{
+					{ json::get<"event_id"_>(event) },
+					{ json::get<"hashes"_>(event)   }
+				};
 
-			const json::value ae_
-			{
-				ae0, 2
-			};
+				const json::value ae_
+				{
+					ae0, 2
+				};
 
-			ae.emplace_back(ae_);
-		});
+				ae.emplace_back(ae_);
+			});
 
 		auth_events = json::stringify(mutable_buffer{ae_buf}, json::value
 		{
@@ -276,6 +294,7 @@ ircd::m::vm::eval__commit(eval &eval,
                           json::iov &event,
                           const json::iov &contents)
 {
+	// These conditions come from the m::eval linkage in ircd/m.cc
 	assert(eval.issue);
 	assert(eval.copts);
 	assert(eval.opts);
@@ -388,6 +407,7 @@ ircd::m::vm::eval__event(eval &eval,
                          const event &event)
 try
 {
+	// These conditions come from the m::eval linkage in ircd/m.cc
 	assert(eval.opts);
 	assert(eval.event_);
 	assert(eval.id);
@@ -583,6 +603,11 @@ ircd::m::vm::_eval_pdu(eval &eval,
 		at<"room_id"_>(event)
 	};
 
+	const string_view &type
+	{
+		at<"type"_>(event)
+	};
+
 	if(!opts.replays && exists(event_id))  //TODO: exclusivity
 		throw error
 		{
@@ -603,42 +628,10 @@ ircd::m::vm::_eval_pdu(eval &eval,
 			opts.reserve_bytes
 	};
 
-	db::txn txn
-	{
-		*dbs::events, db::txn::opts
-		{
-			reserve_bytes + opts.reserve_index,   // reserve_bytes
-			0,                                    // max_bytes (no max)
-		}
-	};
-
-	eval.txn = &txn;
-	const unwind cleartxn{[&eval]
-	{
-		eval.txn = nullptr;
-	}};
-
 	// Obtain sequence number here
 	eval.sequence = ++vm::current_sequence;
 
-	m::dbs::write_opts wopts;
-	wopts.present = opts.present;
-	wopts.history = opts.history;
-	wopts.head = opts.head;
-	wopts.refs = opts.refs;
-	wopts.idx = eval.sequence;
-
 	eval_hook(event);
-
-	const auto &depth
-	{
-		json::get<"depth"_>(event)
-	};
-
-	const auto &type
-	{
-		unquote(at<"type"_>(event))
-	};
 
 	const event::prev prev
 	{
@@ -650,57 +643,76 @@ ircd::m::vm::_eval_pdu(eval &eval,
 		size(json::get<"prev_events"_>(prev))
 	};
 
-	//TODO: ex
-	if(opts.write && prev_count)
-	{
-		int64_t top;
-		id::event::buf head;
-		std::tie(head, top, std::ignore) = m::top(std::nothrow, room_id);
-		if(top < 0 && (opts.head_must_exist || opts.history))
+	int64_t top;
+	id::event::buf head;
+	std::tie(head, top, std::ignore) = m::top(std::nothrow, room_id);
+	if(top < 0 && (opts.head_must_exist || opts.history))
+		if(type != "m.room.create")
 			throw error
 			{
 				fault::STATE, "Found nothing for room %s", string_view{room_id}
 			};
 
-		for(size_t i(0); i < prev_count; ++i)
-		{
-			const auto prev_id{prev.prev_event(i)};
-			if(opts.prev_check_exists && !exists(prev_id))
-				throw error
-				{
-					fault::EVENT, "Missing prev event %s", string_view{prev_id}
-				};
-		}
+	for(size_t i(0); i < prev_count; ++i)
+	{
+		const auto prev_id{prev.prev_event(i)};
+		if(opts.prev_check_exists && !exists(prev_id))
+			throw error
+			{
+				fault::EVENT, "Missing prev event %s", string_view{prev_id}
+			};
+	}
 
+	if(!opts.write)
+		return fault::ACCEPT;
+
+	db::txn txn
+	{
+		*dbs::events, db::txn::opts
+		{
+			reserve_bytes + opts.reserve_index,   // reserve_bytes
+			0,                                    // max_bytes (no max)
+		}
+	};
+
+	// Expose to eval interface
+	eval.txn = &txn;
+	const unwind clear{[&eval]
+	{
+		eval.txn = nullptr;
+	}};
+
+	// Preliminary write_opts
+	m::dbs::write_opts wopts;
+	wopts.present = opts.present;
+	wopts.history = opts.history;
+	wopts.head = opts.head;
+	wopts.refs = opts.refs;
+	wopts.event_idx = eval.sequence;
+
+	m::state::id_buffer new_root_buf;
+	wopts.root_out = new_root_buf;
+	string_view new_root;
+	if(prev_count)
+	{
 		m::room room{room_id, head};
 		m::room::state state{room};
-		m::state::id_buffer new_root_buf;
 		wopts.root_in = state.root_id;
-		wopts.root_out = new_root_buf;
-		const auto new_root
-		{
-			dbs::write(*eval.txn, event, wopts)
-		};
+		new_root = dbs::write(txn, event, wopts);
 	}
-	else if(opts.write)
+	else
 	{
-		m::state::id_buffer new_root_buf;
-		wopts.root_out = new_root_buf;
-		const auto new_root
-		{
-			dbs::write(*eval.txn, event, wopts)
-		};
+		new_root = dbs::write(txn, event, wopts);
 	}
 
-	if(opts.write)
-		write(eval);
-
+	write_commit(eval);
 	return fault::ACCEPT;
 }
 
 void
-ircd::m::vm::write(eval &eval)
+ircd::m::vm::write_commit(eval &eval)
 {
+	assert(eval.txn);
 	auto &txn(*eval.txn);
 	if(eval.opts->debuglog_accept)
 		log::debug

@@ -85,8 +85,15 @@ put__invite(client &client,
 
 	check_event(request, event);
 
-	//TODO: eval()
-
+	std::cout << event << std::endl;
+/*
+	m::vm::opts vmopts;
+	vmopts.non_conform |= m::event::conforms::MISSING_PREV_STATE;
+	m::vm::eval
+	{
+		event, vmopts
+	};
+*/
 	const json::strung event_strung
 	{
 		event

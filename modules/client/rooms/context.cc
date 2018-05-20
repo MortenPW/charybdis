@@ -22,8 +22,10 @@ get__context(client &client,
 		url::decode(request.parv[2], event_id)
 	};
 
-	//TODO: XXX
-	assert(0);
+	throw m::UNSUPPORTED
+	{
+		"TODO: XXX"
+	};
 
 	const m::event::fetch event
 	{

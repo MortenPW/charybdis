@@ -1075,6 +1075,15 @@ ircd::m::event::essential(json::iov &event,
 
 		closure(event);
 	}
+	else if(type == "m.room.redaction")
+	{
+		const json::iov::push _content
+		{
+			event, { "content", "{}" }
+		};
+
+		closure(event);
+	}
 	else
 	{
 		const json::iov::push _content
@@ -1153,6 +1162,11 @@ ircd::m::essential(m::event event,
 			{ "users", unquote(content.at("users"))                   },
 			{ "users_default", unquote(content.at("users_default"))   },
 		});
+	}
+	else if(type == "m.room.redaction")
+	{
+		json::get<"redacts"_>(event) = string_view{};
+		content = "{}"_sv;
 	}
 	else
 	{

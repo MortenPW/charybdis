@@ -418,6 +418,10 @@ synchronize(client &client,
 	if(!room.membership(user_id, "join"))
 		return false;
 
+//	if(json::get<"type"_>(event) == "m.room.message")
+//		if(json::get<"sender"_>(event) == user_id)
+//			return false;
+
 	update_sync(client, request, args, event, room);
 	return true;
 }
@@ -875,7 +879,8 @@ polylog_sync_room_state(shortpoll &sp,
 		room
 	};
 
-	state.for_each([&](const m::event &event)
+	const auto closure{[&]
+	(const m::event &event)
 	{
 		if(at<"depth"_>(event) >= int64_t(sp.state_at))
 			return;
@@ -890,6 +895,18 @@ polylog_sync_room_state(shortpoll &sp,
 
 		array.append(event);
 		sp.committed = true;
+	}};
+
+	state.for_each(closure, m::event::keys::selection
+	{
+		m::event::keys::exclude
+		{
+			"auth_events",
+			"prev_state",
+			"hashes",
+			"origin",
+			"signatures"
+		}
 	});
 }
 

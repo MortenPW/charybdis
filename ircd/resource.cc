@@ -208,7 +208,7 @@ try
 	};
 
 	request.node_id = {"", x_matrix.origin};
-	request.origin = request.node_id.host();
+	request.origin = x_matrix.origin;
 	return verified;
 }
 catch(const std::exception &e)

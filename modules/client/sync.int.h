@@ -50,6 +50,18 @@ struct shortpoll
 		request.user_id
 	};
 
+	const std::string filter_buf
+	{
+		args.filter_id?
+			user.filter(std::nothrow, args.filter_id):
+			std::string{}
+	};
+
+	const m::filter filter
+	{
+		json::object{filter_buf}
+	};
+
 	const m::user::room user_room
 	{
 		user

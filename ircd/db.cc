@@ -488,10 +488,10 @@ try
 	opts.stats_dump_period_sec = 0;
 	opts.enable_thread_tracking = true;
 	opts.delete_obsolete_files_period_micros = 0;
-	opts.max_background_jobs = 2;
-	opts.max_background_flushes = 1;
-	opts.max_background_compactions = 1;
-	opts.max_subcompactions = 1;
+	opts.max_background_jobs = 0;
+	opts.max_background_flushes = 0;
+	opts.max_background_compactions = 0;
+	opts.max_subcompactions = 0;
 	opts.max_open_files = -1; //ircd::info::rlimit_nofile / 4;
 	//opts.allow_concurrent_memtable_write = true;
 	//opts.enable_write_thread_adaptive_yield = false;
